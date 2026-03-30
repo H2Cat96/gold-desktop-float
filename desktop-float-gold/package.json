@@ -1,0 +1,69 @@
+{
+  "name": "desktop-float-gold",
+  "version": "0.1.0",
+  "private": true,
+  "description": "基于招商银行黄金行情接口的桌面悬浮窗（Electron）",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac",
+    "postinstall": "electron --version || true"
+  },
+  "dependencies": {
+    "https-proxy-agent": "^7.0.4",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.rcchn.gold-float",
+    "productName": "金价悬浮窗",
+    "icon": "build/AppIcon.icns",
+    "asar": true,
+    "files": [
+      "**/*",
+      "!.userData/**",
+      "!history.json",
+      "!.DS_Store",
+      "!*.md",
+      "!build/**"
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "icon": "build/AppIcon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "金价悬浮窗",
+      "background": "build/dmg_background.png",
+      "window": {
+        "width": 600,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 150,
+          "y": 185,
+          "type": "file"
+        },
+        {
+          "x": 450,
+          "y": 185,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  }
+}

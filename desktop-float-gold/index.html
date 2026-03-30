@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>金价悬浮窗</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+        -webkit-user-select: none;
+        background: rgba(24,24,24,0.55);
+        color: #fff;
+        overflow: hidden;
+        transition: opacity 0.25s ease;
+      }
+      .titlebar {
+        -webkit-app-region: drag;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px;
+        background: rgba(0,0,0,0.25);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        font-size: 12px;
+      }
+      .titlebar .actions { -webkit-app-region: no-drag; display: flex; gap: 8px; }
+      .btn {
+        cursor: pointer;
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 6px;
+        border: 1px solid rgba(255,255,255,0.15);
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+      }
+      .tabs {
+        display: flex;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        padding: 0 10px;
+      }
+      .tab {
+        -webkit-app-region: no-drag;
+        background: none;
+        border: none;
+        color: rgba(255,255,255,0.45);
+        font-size: 12px;
+        padding: 6px 14px;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+      }
+      .tab.active { color: #fff; border-bottom-color: #3ad29f; }
+      .view { display: none; }
+      .view.active { display: block; }
+
+      /* List */
+      .content { padding: 8px 10px; }
+      .time { font-size: 11px; opacity: 0.55; margin-bottom: 6px; }
+      .list { display: grid; gap: 6px; }
+      .item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 7px 10px;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.1);
+      }
+      .name { font-weight: 600; font-size: 13px; }
+      .sub { font-size: 11px; opacity: 0.65; margin-top: 2px; }
+      .price { font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 600; }
+      .pos { color: #3ad29f; }
+      .neg { color: #ff6b6b; }
+      .footer { margin-top: 6px; font-size: 10px; opacity: 0.4; padding-bottom: 4px; }
+
+      /* Chart */
+      .chart-content { padding: 8px 8px 6px; }
+      .variety-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+      .vtab {
+        -webkit-app-region: no-drag;
+        font-size: 11px;
+        padding: 2px 9px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,0.18);
+        background: rgba(255,255,255,0.06);
+        color: rgba(255,255,255,0.55);
+        cursor: pointer;
+      }
+      .vtab.active { background: rgba(58,210,159,0.18); border-color: #3ad29f; color: #3ad29f; }
+      canvas#chart {
+        display: block;
+        width: 100%;
+        height: 200px;
+        border-radius: 6px;
+        background: rgba(0,0,0,0.18);
+      }
+      .chart-stat {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        margin-top: 6px;
+        padding: 0 2px;
+        opacity: 0.82;
+      }
+      .loading {
+        font-size: 11px;
+        opacity: 0.5;
+        text-align: center;
+        padding: 20px 0;
+      }
+      /* Buy price row */
+      .buy-row {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-bottom: 7px;
+        font-size: 11px;
+      }
+      .buy-row label { opacity: 0.55; white-space: nowrap; }
+      .buy-input {
+        -webkit-app-region: no-drag;
+        -webkit-user-select: text;
+        user-select: text;
+        flex: 1;
+        min-width: 0;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 5px;
+        color: #fff;
+        font-size: 11px;
+        padding: 3px 6px;
+        outline: none;
+      }
+      .buy-input::placeholder { color: rgba(255,255,255,0.25); }
+      .buy-input:focus { border-color: rgba(255,215,0,0.6); }
+      .buy-btn {
+        -webkit-app-region: no-drag;
+        cursor: pointer;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 5px;
+        border: 1px solid rgba(255,215,0,0.5);
+        background: rgba(255,215,0,0.12);
+        color: #ffd700;
+        white-space: nowrap;
+      }
+      .buy-btn.clr {
+        border-color: rgba(255,107,107,0.4);
+        background: rgba(255,107,107,0.1);
+        color: #ff6b6b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="titlebar">
+      <div>金价悬浮窗</div>
+      <div class="actions">
+        <button id="refresh" class="btn">刷新</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="list">行情</button>
+      <button class="tab" data-tab="chart">走势图</button>
+    </div>
+
+    <div id="view-list" class="view active">
+      <div class="content">
+        <div id="time" class="time">加载中…</div>
+        <div id="list" class="list"></div>
+        <div class="footer">数据来源：新浪财经 · 上海黄金交易所（实时）</div>
+      </div>
+    </div>
+
+    <div id="view-chart" class="view">
+      <div class="chart-content">
+        <div id="variety-tabs" class="variety-tabs"></div>
+        <div class="buy-row">
+          <label>买入价</label>
+          <input id="buy-input" class="buy-input" type="number" step="0.01" placeholder="输入买入价格…">
+          <button id="buy-set" class="buy-btn">确认</button>
+          <button id="buy-clear" class="buy-btn clr" style="display:none">清除</button>
+        </div>
+        <canvas id="chart"></canvas>
+        <div id="chart-stat" class="chart-stat"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      const timeEl        = document.getElementById('time')
+      const listEl        = document.getElementById('list')
+      const refreshBtn    = document.getElementById('refresh')
+      const varietyTabsEl = document.getElementById('variety-tabs')
+      const chartEl       = document.getElementById('chart')
+      const chartStatEl   = document.getElementById('chart-stat')
+
+      const buyInputEl  = document.getElementById('buy-input')
+      const buySetBtn   = document.getElementById('buy-set')
+      const buyClearBtn = document.getElementById('buy-clear')
+
+      const GREEN = '#3ad29f'
+      const RED   = '#ff6b6b'
+      const GOLD  = '#ffd700'
+
+      let ticking      = false
+      let currentSecid = null
+      let lastPreClose = {}
+
+      /* ---------- Buy price helpers ---------- */
+      const buyKey  = name => `buyPrice::${name}`
+      const getBuy  = name => { const v = localStorage.getItem(buyKey(name)); return v ? parseFloat(v) : null }
+      const setBuy  = (name, p) => localStorage.setItem(buyKey(name), p)
+      const clearBuy = name => localStorage.removeItem(buyKey(name))
+
+      function syncBuyUI() {
+        const bp = getBuy(currentSecid)
+        buyInputEl.value        = bp != null ? bp : ''
+        buyClearBtn.style.display = bp != null ? '' : 'none'
+      }
+
+      buySetBtn.addEventListener('click', () => {
+        const v = parseFloat(buyInputEl.value)
+        if (!isNaN(v) && v > 0) { setBuy(currentSecid, v); syncBuyUI(); refreshChart() }
+      })
+      buyInputEl.addEventListener('keydown', e => { if (e.key === 'Enter') buySetBtn.click() })
+      buyClearBtn.addEventListener('click', () => { clearBuy(currentSecid); syncBuyUI(); refreshChart() })
+
+      /* ---------- Tab switching ---------- */
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+          document.querySelectorAll('.view').forEach(v => v.classList.remove('active'))
+          tab.classList.add('active')
+          document.getElementById('view-' + tab.dataset.tab).classList.add('active')
+          if (tab.dataset.tab === 'chart') refreshChart()
+        })
+      })
+
+      /* ---------- Chart refresh ---------- */
+      async function refreshChart() {
+        if (!window.goldApi) return
+        const history = window.goldApi.getHistory()
+        const names = Object.keys(history).filter(n => {
+          const pts = history[n]
+          return pts && pts.length && pts.some(p => p.p > 0)
+        })
+        // build variety tabs
+        if (!currentSecid || !history[currentSecid]) currentSecid = names[0] || null
+        varietyTabsEl.innerHTML = names.map(n =>
+          `<button class="vtab${n === currentSecid ? ' active' : ''}" data-name="${n}">${n}</button>`
+        ).join('')
+        varietyTabsEl.querySelectorAll('.vtab').forEach(btn => {
+          btn.addEventListener('click', () => {
+            currentSecid = btn.dataset.name
+            syncBuyUI()
+            refreshChart()
+          })
+        })
+        if (!currentSecid) {
+          chartStatEl.textContent = '今日暂无数据，等待行情…'
+          chartEl.getContext('2d').clearRect(0, 0, chartEl.width, chartEl.height)
+          return
+        }
+        const pts      = history[currentSecid] || []
+        const preClose = lastPreClose[currentSecid] ?? null
+        const buyPrice = getBuy(currentSecid)
+        syncBuyUI()
+        drawChart(chartEl, pts, preClose, buyPrice)
+        if (pts.length) {
+          const ref   = preClose ?? pts[0].p
+          const cur   = pts[pts.length - 1].p
+          const chg   = cur - ref
+          const pct   = ref ? (chg / ref * 100).toFixed(2) : '—'
+          const sign  = chg >= 0 ? '+' : ''
+          const color = chg >= 0 ? GREEN : RED
+          let stat = `<span>昨收 <b>${ref?.toFixed(2) ?? '—'}</b></span>` +
+            `<span>现价 <b style="color:${color}">${cur.toFixed(2)}</b></span>` +
+            `<span style="color:${color}">${sign}${chg.toFixed(2)} (${sign}${pct}%)</span>`
+          if (buyPrice != null) {
+            const bchg  = cur - buyPrice
+            const bpct  = (bchg / buyPrice * 100).toFixed(2)
+            const bsign = bchg >= 0 ? '+' : ''
+            const bc    = bchg >= 0 ? GREEN : RED
+            stat += `<span style="color:${GOLD};margin-top:3px;font-size:10px">` +
+              `买入 ${buyPrice.toFixed(2)} → <b style="color:${bc}">${bsign}${bchg.toFixed(2)} (${bsign}${bpct}%)</b></span>`
+          }
+          chartStatEl.innerHTML = stat
+        } else {
+          chartStatEl.textContent = '今日暂无行情数据'
+        }
+      }
+
+      /* ---------- Draw chart ---------- */
+      function drawChart(canvas, points, preClose, buyPrice) {
+        const dpr = window.devicePixelRatio || 1
+        const W = canvas.clientWidth  || 340
+        const H = canvas.clientHeight || 200
+        canvas.width  = W * dpr
+        canvas.height = H * dpr
+        const ctx = canvas.getContext('2d')
+        ctx.scale(dpr, dpr)
+        ctx.clearRect(0, 0, W, H)
+
+        if (!points || points.length < 1) {
+          ctx.fillStyle = 'rgba(255,255,255,0.28)'
+          ctx.font = '12px -apple-system,sans-serif'
+          ctx.textAlign = 'center'
+          ctx.fillText('今日暂无行情数据', W / 2, H / 2)
+          return
+        }
+
+        const pad = { top: 12, right: 54, bottom: 22, left: 6 }
+        const cw = W - pad.left - pad.right
+        const ch = H - pad.top - pad.bottom
+
+        const prices   = points.map(p => p.p)
+        const baseline = preClose ?? prices[0]
+        const minP     = Math.min(...prices, baseline)
+        const maxP     = Math.max(...prices, baseline)
+        const spread   = Math.max(maxP - minP, Math.abs(baseline) * 0.001 || 1)
+        const yMin     = minP - spread * 0.15
+        const yMax     = maxP + spread * 0.15
+        const yRange   = yMax - yMin
+
+        const toX = i => pad.left + (points.length <= 1 ? cw / 2 : (i / (points.length - 1)) * cw)
+        const toY = p => pad.top + (1 - (p - yMin) / yRange) * ch
+        const baseY = toY(baseline)
+
+        /* grid */
+        ctx.strokeStyle = 'rgba(255,255,255,0.07)'
+        ctx.lineWidth = 1
+        for (let i = 0; i <= 4; i++) {
+          const y = pad.top + (i / 4) * ch
+          ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke()
+        }
+
+        /* baseline (昨收) */
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)'
+        ctx.lineWidth = 1
+        ctx.setLineDash([4, 4])
+        ctx.beginPath(); ctx.moveTo(pad.left, baseY); ctx.lineTo(pad.left + cw, baseY); ctx.stroke()
+        ctx.setLineDash([])
+
+        /* 买入价基准线 */
+        if (buyPrice != null && buyPrice > 0) {
+          const byY = toY(buyPrice)
+          ctx.strokeStyle = GOLD
+          ctx.lineWidth = 1
+          ctx.setLineDash([5, 3])
+          ctx.beginPath(); ctx.moveTo(pad.left, byY); ctx.lineTo(pad.left + cw, byY); ctx.stroke()
+          ctx.setLineDash([])
+          ctx.fillStyle = GOLD
+          ctx.font = '9px -apple-system,sans-serif'
+          ctx.textAlign = 'right'
+          ctx.fillText(`买 ${buyPrice.toFixed(2)}`, pad.left + cw - 2, byY - 3)
+        }
+
+        if (points.length >= 2) {
+          /* fill */
+          for (let i = 0; i < points.length - 1; i++) {
+            const x0 = toX(i),     y0 = toY(points[i].p)
+            const x1 = toX(i + 1), y1 = toY(points[i + 1].p)
+            const mid = (points[i].p + points[i + 1].p) / 2
+            ctx.beginPath()
+            ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x1, baseY); ctx.lineTo(x0, baseY)
+            ctx.closePath()
+            ctx.fillStyle = mid >= baseline ? `${GREEN}28` : `${RED}28`
+            ctx.fill()
+          }
+          /* line */
+          ctx.lineWidth = 1.5
+          ctx.lineJoin = 'round'
+          for (let i = 0; i < points.length - 1; i++) {
+            const mid = (points[i].p + points[i + 1].p) / 2
+            ctx.strokeStyle = mid >= baseline ? GREEN : RED
+            ctx.beginPath()
+            ctx.moveTo(toX(i), toY(points[i].p))
+            ctx.lineTo(toX(i + 1), toY(points[i + 1].p))
+            ctx.stroke()
+          }
+        }
+
+        /* current dot + glow */
+        const lx = toX(points.length - 1)
+        const ly = toY(points[points.length - 1].p)
+        const dc = points[points.length - 1].p >= baseline ? GREEN : RED
+        ctx.beginPath(); ctx.arc(lx, ly, 6, 0, Math.PI * 2)
+        ctx.strokeStyle = dc + '55'; ctx.lineWidth = 1.5; ctx.stroke()
+        ctx.beginPath(); ctx.arc(lx, ly, 3.5, 0, Math.PI * 2)
+        ctx.fillStyle = dc; ctx.fill()
+
+        /* Y labels */
+        ctx.fillStyle = 'rgba(255,255,255,0.48)'
+        ctx.font = '10px -apple-system,sans-serif'
+        ctx.textAlign = 'left'
+        for (let i = 0; i <= 4; i++) {
+          const y = pad.top + (i / 4) * ch
+          const p = yMax - (i / 4) * yRange
+          ctx.fillText(p.toFixed(2), pad.left + cw + 4, y + 4)
+        }
+
+        /* baseline label */
+        ctx.fillStyle = 'rgba(255,255,255,0.35)'
+        ctx.font = '9px -apple-system,sans-serif'
+        ctx.textAlign = 'right'
+        ctx.fillText(`昨收 ${baseline.toFixed(2)}`, pad.left + cw - 2, baseY - 3)
+
+        /* X time labels */
+        ctx.fillStyle = 'rgba(255,255,255,0.38)'
+        ctx.textAlign = 'center'
+        ctx.font = '9px -apple-system,sans-serif'
+        const nX = Math.min(5, points.length)
+        for (let i = 0; i < nX; i++) {
+          const idx = nX <= 1 ? 0 : Math.round(i / (nX - 1) * (points.length - 1))
+          const d = new Date(points[idx].t)
+          const label = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+          ctx.fillText(label, toX(idx), H - 4)
+        }
+      }
+
+      /* ---------- Fetch & render list ---------- */
+      async function renderOnce() {
+        if (!window.goldApi) {
+          timeEl.textContent = '预加载失败：goldApi 不可用'
+          return
+        }
+        if (ticking) return
+        ticking = true
+        try {
+          const res = await window.goldApi.fetchAll()
+          if (res.error) {
+            timeEl.textContent = '获取失败：' + res.error
+            listEl.innerHTML = ''
+          } else {
+            const items = res.items || []
+            // cache preClose per product
+            for (const it of items) lastPreClose[it.name] = it.preClose
+            const t = items[0]?.time || ''
+            timeEl.textContent = t ? `更新时间：${t.slice(0, 5)}` : '—'
+            listEl.innerHTML = items.map(x => {
+              const n   = parseFloat(String(x.upDown).replace('%','').replace('+',''))
+              const cls = !isNaN(n) && n >= 0 ? 'pos' : 'neg'
+              return `
+              <div class="item">
+                <div>
+                  <div class="name">${x.name}</div>
+                  <div class="sub">最高 ${x.high} / 最低 ${x.low}</div>
+                </div>
+                <div style="text-align:right">
+                  <div class="price">${x.curPrice}</div>
+                  <div class="sub ${cls}">${x.upDown}</div>
+                </div>
+              </div>`
+            }).join('')
+            const chartTab = document.querySelector('.tab[data-tab="chart"]')
+            if (chartTab?.classList.contains('active')) refreshChart()
+          }
+        } catch (e) {
+          timeEl.textContent = '异常：' + (e?.message || String(e))
+        } finally {
+          ticking = false
+        }
+      }
+
+      refreshBtn.addEventListener('click', async () => {
+        await renderOnce()
+        const chartTab = document.querySelector('.tab[data-tab="chart"]')
+        if (chartTab?.classList.contains('active')) refreshChart()
+      })
+
+      renderOnce()
+      setInterval(renderOnce, 5000)
+
+      /* ---------- 悬浮透明 / 鼠标穿透 ---------- */
+      // setIgnoreMouseEvents(true, {forward:true}) 模式下 mousemove 仍会被转发，
+      // 借此检测鼠标进入窗口；离开时 mouseleave 正常触发
+      let _hovered = false
+      window.addEventListener('mousemove', () => {
+        if (_hovered || !window.winApi) return
+        _hovered = true
+        window.winApi.mouseEnter()
+      }, { passive: true })
+      document.documentElement.addEventListener('mouseleave', () => {
+        if (!_hovered || !window.winApi) return
+        _hovered = false
+        window.winApi.mouseLeave()
+      })
+    </script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+*.app/
+
+# Node / Electron
+desktop-float-gold/node_modules/
+desktop-float-gold/dist/
+
+# Build artifacts
+desktop-float-gold/build/AppIcon.iconset/
+
+# Electron runtime data
+desktop-float-gold/.userData/
+
+# Runtime generated files
+desktop-float-gold/history.json
+desktop-float-gold/debug_main.cjs
+
+# Uploads
+.codepilot-uploads/
